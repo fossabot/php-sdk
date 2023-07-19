@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace OpenFeature;
 
+use League\Event\EventDispatcher;
+use OpenFeature\implementation\events\Event;
 use OpenFeature\implementation\flags\NoOpClient;
 use OpenFeature\implementation\provider\NoOpProvider;
 use OpenFeature\interfaces\common\LoggerAwareTrait;
 use OpenFeature\interfaces\common\Metadata;
+use OpenFeature\interfaces\events\EventDetails;
+use OpenFeature\interfaces\events\ProviderEvent;
 use OpenFeature\interfaces\flags\API;
 use OpenFeature\interfaces\flags\Client;
 use OpenFeature\interfaces\flags\EvaluationContext;
@@ -27,6 +31,7 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
     private static ?OpenFeatureAPI $instance = null;
 
     private Provider $provider;
+    private EventDispatcher $dispatcher;
 
     /** @var Array<string,OpenFeatureClient> $clientMap */
     private array $clientMap;
@@ -64,6 +69,7 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
     private function __construct()
     {
         $this->provider = new NoOpProvider();
+        $this->dispatcher = new EventDispatcher();
     }
 
     public function getProvider(): Provider
@@ -190,5 +196,27 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
     public function dispose(): void
     {
         $this->getProvider()->dispose();
+    }
+
+    /**
+     * -----------------
+     * Requirement 5.1.1
+     * -----------------
+     * The provider MAY define a mechanism for signaling the occurrence of one of a set
+     * of events, including PROVIDER_READY, PROVIDER_ERROR, PROVIDER_CONFIGURATION_CHANGED
+     * and PROVIDER_STALE, with a provider event details payload.
+     */
+    public function dispatch(ProviderEvent $providerEvent, EventDetails $eventDetails): void
+    {
+        $this->dispatcher->dispatch(new Event($providerEvent->getValue(), $eventDetails));
+    }
+
+    public function addHandler(ProviderEvent $providerEvent, callable $handler): void
+    {
+        $this->dispatcher->subscribeTo($providerEvent->getValue(), $handler);
+    }
+
+    public function removeHandler(ProviderEvent $providerEvent, callable $handler): void
+    {
     }
 }
