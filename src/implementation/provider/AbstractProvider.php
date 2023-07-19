@@ -9,6 +9,7 @@ use OpenFeature\interfaces\common\Metadata as MetadataInterface;
 use OpenFeature\interfaces\flags\EvaluationContext;
 use OpenFeature\interfaces\hooks\Hook;
 use OpenFeature\interfaces\provider\Provider;
+use OpenFeature\interfaces\provider\ProviderState;
 use OpenFeature\interfaces\provider\ResolutionDetails as ResolutionDetailsInterface;
 use Psr\Log\LoggerAwareTrait;
 
@@ -17,6 +18,8 @@ abstract class AbstractProvider implements Provider
     use LoggerAwareTrait;
 
     protected static string $NAME = 'AbstractProvider';
+
+    protected ?ProviderState $status;
 
     /** @var Hook[] $hooks */
     private array $hooks = [];
@@ -38,6 +41,27 @@ abstract class AbstractProvider implements Provider
      * @param mixed[] $defaultValue
      */
     abstract public function resolveObjectValue(string $flagKey, array $defaultValue, ?EvaluationContext $context = null): ResolutionDetailsInterface;
+
+    /**
+     * The default is that this is not required, and must be overridden by the implementing provider
+     */
+    public function dispose(): void
+    {
+        $this->status = ProviderState::NOT_READY();
+    }
+
+    /**
+     * The default is that this is not required, and must be overridden by the implementing provider
+     */
+    public function initialize(EvaluationContext $evaluationContext): void
+    {
+        $this->status = ProviderState::READY();
+    }
+
+    public function getStatus(): ProviderState
+    {
+        return $this->status ?? ProviderState::NOT_READY();
+    }
 
     /**
      * @return Hook[]

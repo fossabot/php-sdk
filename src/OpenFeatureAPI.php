@@ -18,6 +18,7 @@ use Throwable;
 
 use function array_merge;
 use function is_null;
+use function key_exists;
 
 final class OpenFeatureAPI implements API, LoggerAwareInterface
 {
@@ -27,8 +28,12 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
 
     private Provider $provider;
 
+    /** @var Array<string,OpenFeatureClient> $clientMap */
+    private array $clientMap;
+
     /** @var Hook[] $hooks */
     private array $hooks = [];
+
     private ?EvaluationContext $evaluationContext = null;
 
     /**
@@ -73,14 +78,26 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
      * The API MUST provide a function to set the global provider singleton, which
      * accepts an API-conformant provider implementation.
      */
-    public function setProvider(Provider $provider): void
+    public function setProvider(Provider $provider, string ...$clientNames): void
     {
         $this->provider = $provider;
     }
 
     /**
      * -----------------
-     * Requirement 1.1.4
+     * Requirement 1.1.3
+     * -----------------
+     * The API MUST provide a function to bind a given provider to one or more client names.
+     * If the client-name already has a bound provider, it is overwritten with the new mapping.
+     */
+    public function setClientProvider(string $clientName, Provider $provider): void
+    {
+        $this->clientMap[$clientName] = $provider;
+    }
+
+    /**
+     * -----------------
+     * Requirement 1.1.5
      * -----------------
      * The API MUST provide a function for retrieving the metadata field of the
      * configured provider.
@@ -92,22 +109,37 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
 
     /**
      * -----------------
-     * Requirement 1.1.4
+     * Requirement 1.1.6
      * -----------------
      * The API MUST provide a function for creating a client which accepts the following options:
      *   name (optional): A logical string identifier for the client.
      */
-    public function getClient(?string $name = null, ?string $version = null): Client
+    public function getClient(?string $name = null): Client
     {
-        $name = $name ?? 'OpenFeature';
-        $version = $version ?? 'OpenFeature';
-
         try {
-            $client = new OpenFeatureClient($this, $name, $version);
-            $client->setLogger($this->getLogger());
+            $name = $name ?? self::class;
+
+            if (key_exists($name, $this->clientMap)) {
+                return $this->clientMap[$name];
+            }
+
+            try {
+                $client = new OpenFeatureClient($this, $name);
+                $client->setLogger($this->getLogger());
+            } catch (Throwable $err) {
+                $client = new NoOpClient();
+            }
+
+            $this->clientMap[$name] = $client;
 
             return $client;
         } catch (Throwable $err) {
+            /**
+             * -----------------
+             * Requirement 1.1.7
+             * -----------------
+             * The client creation function MUST NOT throw, or otherwise abnormally terminate.
+             */
             return new NoOpClient();
         }
     }
@@ -122,7 +154,7 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
 
     /**
      * -----------------
-     * Requirement 1.1.3
+     * Requirement 1.1.4
      * -----------------
      * The API MUST provide a function to add hooks which accepts one or more API-conformant
      * hooks, and appends them to the collection of any previously added hooks. When new
@@ -146,5 +178,17 @@ final class OpenFeatureAPI implements API, LoggerAwareInterface
     public function setEvaluationContext(EvaluationContext $context): void
     {
         $this->evaluationContext = $context;
+    }
+
+    /**
+     * -----------------
+     * Requirement 1.6.1
+     * -----------------
+     * The API MUST define a shutdown function which, when called, must call the respective
+     * shutdown function on the active provider.
+     */
+    public function dispose(): void
+    {
+        $this->getProvider()->dispose();
     }
 }

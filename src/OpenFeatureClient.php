@@ -57,11 +57,10 @@ class OpenFeatureClient implements Client, LoggerAwareInterface
      * @param string $name Name of the client (used by observability tools).
      * @param string $version Version of the client (used by observability tools).
      */
-    public function __construct(API $api, string $name, string $version)
+    public function __construct(API $api, string $name)
     {
         $this->api = $api;
         $this->name = $name;
-        $this->version = $version;
         $this->hooks = [];
     }
 
